@@ -72,6 +72,11 @@ local function EngravedCheck(details)
   return details.engravingInfo ~= nil
 end
 
+local function RefundableCheck(details)
+  local refundable = details.refundable == true
+  return refundable, refundable
+end
+
 local function EquipmentCheck(details)
   GetClassSubClass(details)
   return details.classID == Enum.ItemClass.Armor or details.classID == Enum.ItemClass.Weapon
@@ -387,9 +392,11 @@ local function WarboundUntilEquippedCheck(details)
   GetTooltipInfoSpell(details)
 
   if details.tooltipInfoSpell then
-    for _, row in ipairs(details.tooltipInfoSpell.lines) do
-      if row.leftText == ITEM_ACCOUNTBOUND_UNTIL_EQUIP or (not details.isBound and row.leftText == ITEM_BIND_TO_ACCOUNT_UNTIL_EQUIP) then
-        return true
+    if not details.isBound then
+      for _, row in ipairs(details.tooltipInfoSpell.lines) do
+        if not details.isBound and tIndexOf(Syndicator.Constants.AccountBoundTooltipLinesNotBound, row.leftText) ~= nil then
+          return true
+        end
       end
     end
     return false
@@ -590,6 +597,27 @@ local function PvPCheck(details)
   return false
 end
 
+local function AnimaCheck(details)
+  return C_Item.IsAnimaItemByID(details.itemID)
+end
+
+local function LockedCheck(details)
+  if not details.hasLoot then
+    return false
+  end
+
+  GetTooltipInfoSpell(details)
+
+  if details.tooltipInfoSpell then
+    for _, row in ipairs(details.tooltipInfoSpell.lines) do
+      if row.leftText == LOCKED then
+        return true, true
+      end
+    end
+    return false
+  end
+end
+
 local function UseATTInfo(details)
   if details.ATTInfoAcquired or not ATTC or not ATTC.SearchForField then -- All The Things
     return
@@ -708,11 +736,14 @@ AddKeywordLocalised("KEYWORD_UNCOLLECTED", UncollectedCheck, SYNDICATOR_L_GROUP_
 AddKeywordLocalised("KEYWORD_MY_CLASS", MyClassCheck, SYNDICATOR_L_GROUP_ITEM_DETAIL)
 AddKeywordLocalised("KEYWORD_PVP", PvPCheck, SYNDICATOR_L_GROUP_ITEM_DETAIL)
 AddKeywordManual(ITEM_UNIQUE:lower(), "unique", UniqueCheck, SYNDICATOR_L_GROUP_ITEM_DETAIL)
+AddKeywordLocalised("KEYWORD_LOCKED", LockedCheck, SYNDICATOR_L_GROUP_ITEM_DETAIL)
+AddKeywordLocalised("KEYWORD_REFUNDABLE", RefundableCheck, SYNDICATOR_L_GROUP_ITEM_DETAIL)
 
 if Syndicator.Constants.IsRetail then
   AddKeywordLocalised("KEYWORD_COSMETIC", CosmeticCheck, SYNDICATOR_L_GROUP_QUALITY)
   AddKeywordManual(TOY:lower(), "toy", ToyCheck, SYNDICATOR_L_GROUP_ITEM_TYPE)
   AddKeywordLocalised("KEYWORD_KEYSTONE", KeystoneCheck, SYNDICATOR_L_GROUP_ITEM_TYPE)
+  AddKeywordManual(WORLD_QUEST_REWARD_FILTERS_ANIMA:lower(), "anima", AnimaCheck, SYNDICATOR_L_GROUP_ITEM_DETAIL)
   if Syndicator.Constants.WarbandBankActive then
     AddKeywordManual(ITEM_ACCOUNTBOUND:lower(), "warbound", BindOnAccountCheck, SYNDICATOR_L_GROUP_ITEM_DETAIL)
     AddKeywordManual(ITEM_ACCOUNTBOUND_UNTIL_EQUIP:lower(), "warbound until equipped", WarboundUntilEquippedCheck, SYNDICATOR_L_GROUP_ITEM_DETAIL)
@@ -1294,7 +1325,11 @@ end
 
 local function ExactKeywordCheck(details, text)
   local keyword = text:match("^#(.*)$")
-  return KEYWORDS_TO_CHECK[keyword] ~= nil and KEYWORDS_TO_CHECK[keyword](details)
+  if KEYWORDS_TO_CHECK[keyword] ~= nil then
+    return KEYWORDS_TO_CHECK[keyword](details)
+  else
+    return false
+  end
 end
 
 local patterns = {

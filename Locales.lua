@@ -109,6 +109,8 @@ L["KEYWORD_UPGRADE"] = "upgrade"
 L["KEYWORD_PVP"] = "pvp"
 L["KEYWORD_MY_CLASS"] = "my class"
 L["KEYWORD_KEYSTONE"] = "keystone"
+L["KEYWORD_LOCKED"] = "locked"
+L["KEYWORD_REFUNDABLE"] = "refundable"
 
 L["GROUP_ARMOR_TYPE"] = "Armor Type"
 L["GROUP_BATTLE_PET"] = "Battle Pet Type"
@@ -145,6 +147,9 @@ local L = Locales.deDE
 
 local L = Locales.ruRU
 --@localization(locale="ruRU", format="lua_additive_table")@
+
+local L = Locales.ptBR
+--@localization(locale="ptBR", format="lua_additive_table")@
 
 local L = Locales.esES
 --@localization(locale="esES", format="lua_additive_table")@

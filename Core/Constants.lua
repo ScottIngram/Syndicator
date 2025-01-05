@@ -31,6 +31,8 @@ Syndicator.Constants = {
   EquippedInventorySlotOffset = 1,
 
   WarbandBankActive = false,
+
+  MailExpiryDuration = 30 * 24 * 60 * 60,
 }
 
 if Syndicator.Constants.IsRetail then
@@ -91,9 +93,9 @@ local AccountBoundTooltipLines = {
   ITEM_BNETACCOUNTBOUND,
   ITEM_BIND_TO_ACCOUNT,
   ITEM_ACCOUNTBOUND,
-  ITEM_ACCOUNTBOUND_UNTIL_EQUIP,
 }
 local AccountBoundTooltipLinesNotBound = {
+  ITEM_ACCOUNTBOUND_UNTIL_EQUIP,
   ITEM_BIND_TO_ACCOUNT_UNTIL_EQUIP,
 }
 Syndicator.Constants.AccountBoundTooltipLines = {}
