@@ -73,8 +73,12 @@ local function EngravedCheck(details)
 end
 
 local function RefundableCheck(details)
-  local refundable = details.refundable == true
-  return refundable, refundable
+  if details.refundable == nil and details.itemLocation and C_Item.DoesItemExist(details.itemLocation) then
+    details.refundable = C_Item.CanBeRefunded(details.itemLocation)
+  elseif details.refundable == nil then
+    details.refundable = false
+  end
+  return details.refundable, details.refundable
 end
 
 local function EquipmentCheck(details)
@@ -119,9 +123,14 @@ local function SwordCheck(details)
   return details.classID == Enum.ItemClass.Weapon and (details.subClassID == Enum.ItemWeaponSubclass.Sword2H or details.subClassID == Enum.ItemWeaponSubclass.Sword1H)
 end
 
+local function RingCheck(details)
+  GetInvType(details)
+  return details.invType == "INVTYPE_FINGER"
+end
+
 local function StaffCheck(details)
   GetClassSubClass(details)
-  return details.classID == Enum.ItemClass.Weapon and (details.subClassID == Enum.ItemWeaponSubclass.Stave)
+  return details.classID == Enum.ItemClass.Weapon and (details.subClassID == 10)
 end
 
 local function MountCheck(details)
@@ -153,6 +162,35 @@ local function SocketedCheck(details)
   else
     return false
   end
+end
+
+-- Compare item spell details to determine if this item's spell is one for
+-- profession knowledge, using base spell for the spell's name
+local baseKnowledgeSpell, baseKnowledgeName = 384372
+local function KnowledgeCheck(details)
+  if baseKnowledgeName == nil then -- cache the comparison name
+    if not C_Spell.IsSpellDataCached(baseKnowledgeSpell) then
+      C_Spell.RequestLoadSpellData(baseKnowledgeSpell)
+      return nil
+    end
+    baseKnowledgeName = C_Spell.GetSpellInfo(baseKnowledgeSpell).name
+  end
+  if not C_Item.IsItemDataCachedByID(details.itemID) then
+    C_Item.RequestLoadItemDataByID(details.itemID)
+    return nil
+  end
+  local spellName, spellID = C_Item.GetItemSpell(details.itemID)
+  if spellID == nil then
+    return false
+  end
+  if spellID and not spellName then
+    C_Spell.RequestLoadSpellData(spellID)
+    return nil
+  end
+  local spellInfo = C_Spell.GetSpellInfo(spellID)
+  -- Check it has the right name and the appropriate icon (which should be
+  -- enough to guarantee its a knowledge item)
+  return spellName == baseKnowledgeName and (spellInfo.iconID == 236225 or spellInfo.iconID == 136175)
 end
 
 local function GetSourceID(itemLink)
@@ -608,14 +646,51 @@ local function LockedCheck(details)
 
   GetTooltipInfoSpell(details)
 
-  if details.tooltipInfoSpell then
-    for _, row in ipairs(details.tooltipInfoSpell.lines) do
-      if row.leftText == LOCKED then
-        return true, true
-      end
+  if not details.tooltipInfoSpell then
+    return
+  end
+
+  for _, row in ipairs(details.tooltipInfoSpell.lines) do
+    if row.leftText == LOCKED then
+      return true, true
     end
+  end
+  return false
+end
+
+local CRAFTED_PATTERN = ITEM_CREATED_BY:gsub("%%s", ".+")
+
+local function CraftedCheck(details)
+  return details.quality ~= 7 and details.classID ~= Enum.ItemClass.Questitem and details.itemLink:match("Player-") ~= nil
+end
+
+local function SetBonusCheck(details)
+  if not Syndicator.Utilities.IsEquipment(details.itemLink) then
     return false
   end
+
+  if C_Item.IsCosmeticItem then
+    local result = CosmeticCheck(details)
+    if result then
+      return false
+    elseif result == nil then
+      return nil
+    end
+  end
+
+  if not C_Item.IsItemDataCachedByID(details.itemID) then
+    C_Item.RequestLoadItemDataByID(details.itemID)
+    return nil
+  end
+
+  -- We would use the specID in the item link, but that doesn't always
+  -- correspond to the class that can use the item
+  for _, specID in ipairs(Syndicator.Search.Constants.AllClassSpecializations) do
+    if C_Item.GetSetBonusesForSpecializationByItemID(specID, details.itemID) ~= nil then
+      return true
+    end
+  end
+  return false
 end
 
 local function UseATTInfo(details)
@@ -695,17 +770,18 @@ end
 
 AddKeywordLocalised("KEYWORD_PET", PetCheck, SYNDICATOR_L_GROUP_ITEM_TYPE)
 AddKeywordLocalised("KEYWORD_BATTLE_PET", PetCheck, SYNDICATOR_L_GROUP_ITEM_TYPE)
-AddKeywordLocalised("KEYWORD_SOULBOUND", SoulboundCheck, SYNDICATOR_L_GROUP_ITEM_DETAIL)
-AddKeywordLocalised("KEYWORD_BOP", SoulboundCheck, SYNDICATOR_L_GROUP_ITEM_DETAIL)
-AddKeywordLocalised("KEYWORD_BOE", BindOnEquipCheck, SYNDICATOR_L_GROUP_ITEM_DETAIL)
-AddKeywordLocalised("KEYWORD_BWE", BindOnEquipCheck, SYNDICATOR_L_GROUP_ITEM_DETAIL)
-AddKeywordLocalised("KEYWORD_BOU", BindOnUseCheck, SYNDICATOR_L_GROUP_ITEM_DETAIL)
+AddKeywordLocalised("KEYWORD_SOULBOUND", SoulboundCheck, SYNDICATOR_L_GROUP_BINDING_TYPE)
+AddKeywordLocalised("KEYWORD_BOP", SoulboundCheck, SYNDICATOR_L_GROUP_BINDING_TYPE)
+AddKeywordLocalised("KEYWORD_BOE", BindOnEquipCheck, SYNDICATOR_L_GROUP_BINDING_TYPE)
+AddKeywordLocalised("KEYWORD_BWE", BindOnEquipCheck, SYNDICATOR_L_GROUP_BINDING_TYPE)
+AddKeywordLocalised("KEYWORD_BOU", BindOnUseCheck, SYNDICATOR_L_GROUP_BINDING_TYPE)
 AddKeywordLocalised("KEYWORD_EQUIPMENT", EquipmentCheck, SYNDICATOR_L_GROUP_ITEM_TYPE)
 AddKeywordLocalised("KEYWORD_GEAR", EquipmentCheck, SYNDICATOR_L_GROUP_ITEM_TYPE)
 AddKeywordLocalised("KEYWORD_AXE", AxeCheck, SYNDICATOR_L_GROUP_WEAPON_TYPE)
 AddKeywordLocalised("KEYWORD_MACE", MaceCheck, SYNDICATOR_L_GROUP_WEAPON_TYPE)
 AddKeywordLocalised("KEYWORD_SWORD", SwordCheck, SYNDICATOR_L_GROUP_WEAPON_TYPE)
 AddKeywordLocalised("KEYWORD_STAFF", StaffCheck, SYNDICATOR_L_GROUP_WEAPON_TYPE)
+AddKeywordLocalised("KEYWORD_RING", RingCheck, SYNDICATOR_L_GROUP_ARMOR_TYPE)
 AddKeywordLocalised("KEYWORD_REAGENT", ReagentCheck, SYNDICATOR_L_GROUP_ITEM_TYPE)
 AddKeywordLocalised("KEYWORD_FOOD", FoodCheck, SYNDICATOR_L_GROUP_ITEM_TYPE)
 AddKeywordLocalised("KEYWORD_DRINK", FoodCheck, SYNDICATOR_L_GROUP_ITEM_TYPE)
@@ -718,8 +794,8 @@ AddKeywordLocalised("KEYWORD_SOCKET", SocketCheck, SYNDICATOR_L_GROUP_ITEM_DETAI
 AddKeywordLocalised("KEYWORD_JUNK", JunkCheck, SYNDICATOR_L_GROUP_QUALITY)
 AddKeywordLocalised("KEYWORD_TRASH", JunkCheck, SYNDICATOR_L_GROUP_QUALITY)
 AddKeywordLocalised("KEYWORD_UPGRADE", UpgradeCheck, SYNDICATOR_L_GROUP_ITEM_DETAIL)
-AddKeywordLocalised("KEYWORD_BOA", BindOnAccountCheck, SYNDICATOR_L_GROUP_ITEM_DETAIL)
-AddKeywordLocalised("KEYWORD_ACCOUNT_BOUND", BindOnAccountCheck, SYNDICATOR_L_GROUP_ITEM_DETAIL)
+AddKeywordLocalised("KEYWORD_BOA", BindOnAccountCheck, SYNDICATOR_L_GROUP_BINDING_TYPE)
+AddKeywordLocalised("KEYWORD_ACCOUNT_BOUND", BindOnAccountCheck, SYNDICATOR_L_GROUP_BINDING_TYPE)
 AddKeywordLocalised("KEYWORD_USE", UseCheck, SYNDICATOR_L_GROUP_ITEM_DETAIL)
 AddKeywordLocalised("KEYWORD_USABLE", UsableCheck, SYNDICATOR_L_GROUP_ITEM_DETAIL)
 AddKeywordLocalised("KEYWORD_OPEN", OpenCheck, SYNDICATOR_L_GROUP_ITEM_DETAIL)
@@ -738,16 +814,19 @@ AddKeywordLocalised("KEYWORD_PVP", PvPCheck, SYNDICATOR_L_GROUP_ITEM_DETAIL)
 AddKeywordManual(ITEM_UNIQUE:lower(), "unique", UniqueCheck, SYNDICATOR_L_GROUP_ITEM_DETAIL)
 AddKeywordLocalised("KEYWORD_LOCKED", LockedCheck, SYNDICATOR_L_GROUP_ITEM_DETAIL)
 AddKeywordLocalised("KEYWORD_REFUNDABLE", RefundableCheck, SYNDICATOR_L_GROUP_ITEM_DETAIL)
+AddKeywordLocalised("KEYWORD_CRAFTED", CraftedCheck, SYNDICATOR_L_GROUP_ITEM_DETAIL)
 
 if Syndicator.Constants.IsRetail then
   AddKeywordLocalised("KEYWORD_COSMETIC", CosmeticCheck, SYNDICATOR_L_GROUP_QUALITY)
   AddKeywordManual(TOY:lower(), "toy", ToyCheck, SYNDICATOR_L_GROUP_ITEM_TYPE)
   AddKeywordLocalised("KEYWORD_KEYSTONE", KeystoneCheck, SYNDICATOR_L_GROUP_ITEM_TYPE)
   AddKeywordManual(WORLD_QUEST_REWARD_FILTERS_ANIMA:lower(), "anima", AnimaCheck, SYNDICATOR_L_GROUP_ITEM_DETAIL)
+  AddKeywordLocalised("KEYWORD_KNOWLEDGE", KnowledgeCheck, SYNDICATOR_L_GROUP_ITEM_DETAIL)
+  AddKeywordLocalised("KEYWORD_SET_BONUS", SetBonusCheck, SYNDICATOR_L_GROUP_ITEM_DETAIL)
   if Syndicator.Constants.WarbandBankActive then
-    AddKeywordManual(ITEM_ACCOUNTBOUND:lower(), "warbound", BindOnAccountCheck, SYNDICATOR_L_GROUP_ITEM_DETAIL)
-    AddKeywordManual(ITEM_ACCOUNTBOUND_UNTIL_EQUIP:lower(), "warbound until equipped", WarboundUntilEquippedCheck, SYNDICATOR_L_GROUP_ITEM_DETAIL)
-    AddKeywordLocalised("KEYWORD_WUE", WarboundUntilEquippedCheck, SYNDICATOR_L_GROUP_ITEM_DETAIL)
+    AddKeywordManual(ITEM_ACCOUNTBOUND:lower(), "warbound", BindOnAccountCheck, SYNDICATOR_L_GROUP_BINDING_TYPE)
+    AddKeywordManual(ITEM_ACCOUNTBOUND_UNTIL_EQUIP:lower(), "warbound until equipped", WarboundUntilEquippedCheck, SYNDICATOR_L_GROUP_BINDING_TYPE)
+    AddKeywordLocalised("KEYWORD_WUE", WarboundUntilEquippedCheck, SYNDICATOR_L_GROUP_BINDING_TYPE)
   end
 end
 
@@ -767,6 +846,9 @@ local sockets = {
   ["EMPTY_SOCKET_RED"] = "red socket",
   ["EMPTY_SOCKET_TINKER"] = "tinker socket",
   ["EMPTY_SOCKET_YELLOW"] = "yellow socket",
+  ["EMPTY_SOCKET_SINGINGSEA"] = "singing sea socket",
+  ["EMPTY_SOCKET_SINGINGTHUNDER"] = "singing thunder socket",
+  ["EMPTY_SOCKET_SINGINGWIND"] = "singing wind socket",
 }
 
 if Syndicator.Constants.IsClassic and not Syndicator.Constants.IsEra then
@@ -1778,12 +1860,19 @@ function Syndicator.Search.InitializeSearchEngine()
     [3] = "mail",
     [4] = "plate",
     [6] = "shields",
-    [7] = "librams",
-    [8] = "idols",
-    [9] = "totems",
-    [10] = "sigils",
-    [11] = "relic",
   }
+  if Syndicator.Constants.IsEra then
+    for subClass, english in pairs({
+        [7] = "librams",
+        [8] = "idols",
+        [9] = "totems",
+        [10] = "sigils",
+        [11] = "relic",
+      }) do
+      armorTypesToCheck[subClass] = english
+    end
+  end
+  local er
   for subClass, english in pairs(armorTypesToCheck) do
     local keyword = C_Item.GetItemSubClassInfo(Enum.ItemClass.Armor, subClass)
     if keyword ~= nil then
